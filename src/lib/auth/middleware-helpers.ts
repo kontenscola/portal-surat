@@ -73,7 +73,7 @@ export async function verifyAdminSessionFromRequest(
       getAll() {
         return request.cookies.getAll()
       },
-      setAll(cookiesToSet) {
+      setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
         cookiesToSet.forEach(({ name, value, options }) => {
           response.headers.append(
             'Set-Cookie',
