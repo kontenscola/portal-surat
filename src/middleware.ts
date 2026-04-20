@@ -3,6 +3,28 @@ import type { NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { verifySiswaSessionFromRequest } from '@/lib/auth/middleware-helpers'
 
+type CookieToSet = { name: string; value: string; options?: Record<string, unknown> }
+
+function createSupabaseMiddlewareClient(request: NextRequest, response: ReturnType<typeof NextResponse.next>) {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet: CookieToSet[]) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            request.cookies.set(name, value)
+            response.cookies.set(name, value, options as Parameters<typeof response.cookies.set>[2])
+          })
+        },
+      },
+    }
+  )
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
@@ -17,36 +39,16 @@ export async function middleware(request: NextRequest) {
 
   // Rute /admin/* — proteksi dengan Supabase Auth
   if (pathname.startsWith('/admin')) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
     const response = NextResponse.next()
+    const supabase = createSupabaseMiddlewareClient(request, response)
 
-    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            request.cookies.set(name, value)
-            response.cookies.set(name, value, options)
-          })
-        },
-      },
-    })
-
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser()
+    const { data: { user }, error } = await supabase.auth.getUser()
 
     if (error || !user) {
       return NextResponse.redirect(new URL('/', request.url))
     }
 
     // Blokir siswa dari mengakses /admin/*
-    // Siswa menggunakan JWT custom, bukan Supabase Auth — jika ada sesi siswa, tolak akses
     const siswaSession = await verifySiswaSessionFromRequest(request)
     if (siswaSession) {
       return NextResponse.redirect(new URL('/dashboard', request.url))
@@ -62,29 +64,10 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
 
-    // Cek sesi admin
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
     const response = NextResponse.next()
+    const supabase = createSupabaseMiddlewareClient(request, response)
 
-    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            request.cookies.set(name, value)
-            response.cookies.set(name, value, options)
-          })
-        },
-      },
-    })
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    const { data: { user } } = await supabase.auth.getUser()
 
     if (user) {
       return NextResponse.redirect(new URL('/admin', request.url))
@@ -93,19 +76,11 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
-  // Semua rute lain — izinkan
   return NextResponse.next()
 }
 
 export const config = {
   matcher: [
-    /*
-     * Cocokkan semua path kecuali:
-     * - _next/static (file statis)
-     * - _next/image (optimasi gambar)
-     * - favicon.ico
-     * - file dengan ekstensi (gambar, font, dll)
-     */
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
