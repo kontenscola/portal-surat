@@ -34,11 +34,11 @@ export async function POST(request: NextRequest) {
           getAll() {
             return request.cookies.getAll()
           },
-          setAll(cookiesToSet) {
+          setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
             // Set cookie di kedua response agar konsisten
             cookiesToSet.forEach(({ name, value, options }) => {
-              successResponse.cookies.set(name, value, options)
-              errorResponse.cookies.set(name, value, options)
+              successResponse.cookies.set(name, value, options as Parameters<typeof successResponse.cookies.set>[2])
+              errorResponse.cookies.set(name, value, options as Parameters<typeof errorResponse.cookies.set>[2])
             })
           },
         },
