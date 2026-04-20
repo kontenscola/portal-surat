@@ -12,5 +12,6 @@ export async function POST(request: NextRequest) {
   const supabase = createClient()
   await supabase.auth.signOut()
 
-  return NextResponse.redirect(new URL('/', request.url))
+  // Status 303 agar browser ganti ke GET saat redirect (mencegah 405)
+  return NextResponse.redirect(new URL('/', request.url), { status: 303 })
 }
