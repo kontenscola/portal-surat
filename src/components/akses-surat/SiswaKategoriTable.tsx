@@ -65,12 +65,12 @@ export default function SiswaKategoriTable({
       }
     }
     // Data baru dari upload (belum di server)
-    for (const [siswaId, s] of newUploads) {
+    Array.from(newUploads.entries()).forEach(([siswaId, s]) => {
       if (!deletedIds.has(s.id)) {
         const override = optimisticOverrides[s.id]
-        map.set(siswaId, override ? { ...s, ...override } : s)
+        map.set(siswaId, override ? { ...s, ...override } as SuratSiswaRow : s)
       }
-    }
+    })
     return map
   }, [suratSiswaList, newUploads, optimisticOverrides, deletedIds])
 
