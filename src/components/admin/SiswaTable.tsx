@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import type { User } from '@/types/database'
 import Modal from '@/components/ui/Modal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
@@ -31,6 +32,7 @@ const EMPTY_FORM: FormState = {
 const PAGE_SIZE = 20
 
 export default function SiswaTable({ initialData }: SiswaTableProps) {
+  const router = useRouter()
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [modalOpen, setModalOpen] = useState(false)
@@ -46,6 +48,7 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
   // Import state
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isImporting, setIsImporting] = useState(false)
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0 })
   const [importResult, setImportResult] = useState<ImportSiswaResult | null>(null)
   const [importResultOpen, setImportResultOpen] = useState(false)
   const [templateModalOpen, setTemplateModalOpen] = useState(false)
@@ -156,6 +159,7 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
       setModalOpen(false)
       setSelectedSiswa(null)
       setForm(EMPTY_FORM)
+      router.refresh()
     } finally {
       setIsSubmitting(false)
     }
@@ -177,6 +181,7 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
       }
       setConfirmOpen(false)
       setSiswaToDelete(null)
+      router.refresh()
     } finally {
       setIsDeleting(false)
     }
@@ -226,13 +231,30 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
         return
       }
 
-      const result = await importSiswa(dataRows)
-      setImportResult(result)
+      const BATCH_SIZE = 20
+      const total = dataRows.length
+      setImportProgress({ current: 0, total })
+      setIsImporting(true)
+
+      const accumulated: ImportSiswaResult = { imported: 0, skipped: 0, errors: [] }
+
+      for (let i = 0; i < total; i += BATCH_SIZE) {
+        const batch = dataRows.slice(i, i + BATCH_SIZE)
+        const result = await importSiswa(batch)
+        accumulated.imported += result.imported
+        accumulated.skipped += result.skipped
+        accumulated.errors.push(...result.errors)
+        setImportProgress({ current: Math.min(i + BATCH_SIZE, total), total })
+      }
+
+      setImportResult(accumulated)
       setImportResultOpen(true)
+      router.refresh()
     } catch {
       alert('Gagal membaca file. Pastikan file berformat .xlsx yang valid.')
     } finally {
       setIsImporting(false)
+      setImportProgress({ current: 0, total: 0 })
     }
   }
 
@@ -531,6 +553,33 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Modal Loading Progress Import */}
+      <Modal
+        isOpen={isImporting}
+        onClose={() => {}}
+        title="Mengimpor Data Siswa"
+      >
+        {(() => {
+          const { current, total } = importProgress
+          const pct = total > 0 ? Math.round((current / total) * 100) : 0
+          return (
+            <div className="space-y-4 py-2">
+              <div className="flex justify-between text-sm text-gray-600 mb-1">
+                <span>{current} dari {total} siswa</span>
+                <span className="font-semibold">{pct}%</span>
+              </div>
+              <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
+                <div
+                  className="h-3 rounded-full bg-green-500 transition-all duration-300"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <p className="text-xs text-gray-400 text-center">Mohon tunggu, jangan tutup halaman ini...</p>
+            </div>
+          )
+        })()}
       </Modal>
 
       {/* Modal Import Excel */}

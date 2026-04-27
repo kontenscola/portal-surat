@@ -2,6 +2,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import AdminTabs from '@/components/admin/AdminTabs'
 import type { User, SuratType } from '@/types/database'
 
+export const dynamic = 'force-dynamic'
+
 export default async function AdminPage() {
   const supabase = createAdminClient()
 
