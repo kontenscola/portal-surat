@@ -141,6 +141,36 @@ export async function importSiswa(rows: ImportSiswaRow[]): Promise<ImportSiswaRe
   return { imported, skipped, errors }
 }
 
+export async function archiveSiswa(ids: string[]): Promise<ActionResult> {
+  if (ids.length === 0) return { success: false, error: 'Tidak ada siswa yang dipilih' }
+  const supabase = createAdminClient()
+  const { error } = await supabase
+    .from('users')
+    .update({ is_archived: true })
+    .in('id', ids)
+  if (error) {
+    console.error('[archiveSiswa] DB error:', error)
+    return { success: false, error: 'Gagal mengarsipkan siswa' }
+  }
+  revalidatePath('/admin')
+  return { success: true }
+}
+
+export async function unarchiveSiswa(ids: string[]): Promise<ActionResult> {
+  if (ids.length === 0) return { success: false, error: 'Tidak ada siswa yang dipilih' }
+  const supabase = createAdminClient()
+  const { error } = await supabase
+    .from('users')
+    .update({ is_archived: false })
+    .in('id', ids)
+  if (error) {
+    console.error('[unarchiveSiswa] DB error:', error)
+    return { success: false, error: 'Gagal memulihkan siswa' }
+  }
+  revalidatePath('/admin')
+  return { success: true }
+}
+
 export async function deleteSiswa(id: string): Promise<ActionResult> {
   const supabase = createAdminClient()
 

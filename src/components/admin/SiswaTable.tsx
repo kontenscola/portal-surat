@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import type { User } from '@/types/database'
 import Modal from '@/components/ui/Modal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
-import { createSiswa, updateSiswa, deleteSiswa, importSiswa } from '@/actions/siswa'
+import { createSiswa, updateSiswa, deleteSiswa, importSiswa, archiveSiswa, unarchiveSiswa } from '@/actions/siswa'
 import type { ImportSiswaRow, ImportSiswaResult } from '@/actions/siswa'
 
 interface SiswaTableProps {
@@ -33,19 +33,30 @@ const PAGE_SIZE = 20
 
 export default function SiswaTable({ initialData }: SiswaTableProps) {
   const router = useRouter()
+
+  // Tab aktif / arsip
+  const [tab, setTab] = useState<'aktif' | 'arsip'>('aktif')
+
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+
+  // Checkbox selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [isBulkActing, setIsBulkActing] = useState(false)
+
+  // Form modal
   const [modalOpen, setModalOpen] = useState(false)
   const [selectedSiswa, setSelectedSiswa] = useState<User | null>(null)
-  const [confirmOpen, setConfirmOpen] = useState(false)
-  const [siswaToDelete, setSiswaToDelete] = useState<User | null>(null)
-
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [formError, setFormError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Delete
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [siswaToDelete, setSiswaToDelete] = useState<User | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
-  // Import state
+  // Import
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isImporting, setIsImporting] = useState(false)
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0 })
@@ -53,28 +64,82 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
   const [importResultOpen, setImportResultOpen] = useState(false)
   const [templateModalOpen, setTemplateModalOpen] = useState(false)
 
-  // Client-side filtering (case-insensitive, by nama_lengkap or nis)
+  // Filter by tab then search
+  const tabFiltered = useMemo(
+    () => initialData.filter((s) => (tab === 'aktif' ? !s.is_archived : s.is_archived)),
+    [initialData, tab]
+  )
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return initialData
-    return initialData.filter(
+    if (!q) return tabFiltered
+    return tabFiltered.filter(
       (s) =>
         s.nama_lengkap.toLowerCase().includes(q) ||
         (s.nis ?? '').toLowerCase().includes(q)
     )
-  }, [initialData, search])
+  }, [tabFiltered, search])
 
-  // Reset to page 1 when search changes
-  const handleSearchChange = (value: string) => {
-    setSearch(value)
-    setPage(1)
-  }
-
-  // Pagination
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
-  // Open modal for create
+  const handleTabChange = (t: 'aktif' | 'arsip') => {
+    setTab(t)
+    setPage(1)
+    setSearch('')
+    setSelectedIds(new Set())
+  }
+
+  const handleSearchChange = (value: string) => {
+    setSearch(value)
+    setPage(1)
+    setSelectedIds(new Set())
+  }
+
+  // Checkbox handlers
+  const isAllSelected = paginated.length > 0 && paginated.every((s) => selectedIds.has(s.id))
+  const isIndeterminate = paginated.some((s) => selectedIds.has(s.id)) && !isAllSelected
+
+  const handleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        paginated.forEach((s) => next.delete(s.id))
+        return next
+      })
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        paginated.forEach((s) => next.add(s.id))
+        return next
+      })
+    }
+  }
+
+  const handleSelectOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  // Bulk archive / unarchive
+  const handleBulkArchive = async () => {
+    if (selectedIds.size === 0) return
+    setIsBulkActing(true)
+    try {
+      const ids = Array.from(selectedIds)
+      const result = tab === 'aktif' ? await archiveSiswa(ids) : await unarchiveSiswa(ids)
+      if (!result.success) { alert(result.error); return }
+      setSelectedIds(new Set())
+      router.refresh()
+    } finally {
+      setIsBulkActing(false)
+    }
+  }
+
+  // Form modal
   const handleAddSiswa = () => {
     setSelectedSiswa(null)
     setForm(EMPTY_FORM)
@@ -82,7 +147,6 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
     setModalOpen(true)
   }
 
-  // Open modal for edit
   const handleEdit = (siswa: User) => {
     setSelectedSiswa(siswa)
     setForm({
@@ -96,24 +160,12 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
     setModalOpen(true)
   }
 
-  // Open confirm dialog for delete
-  const handleDeleteClick = (siswa: User) => {
-    setSiswaToDelete(siswa)
-    setConfirmOpen(true)
-  }
-
   const handleModalClose = () => {
     if (isSubmitting) return
     setModalOpen(false)
     setSelectedSiswa(null)
     setForm(EMPTY_FORM)
     setFormError(null)
-  }
-
-  const handleConfirmClose = () => {
-    if (isDeleting) return
-    setConfirmOpen(false)
-    setSiswaToDelete(null)
   }
 
   const handleFormChange = (field: keyof FormState, value: string) => {
@@ -123,13 +175,10 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setFormError(null)
-
-    // Client-side: all fields required
     if (!form.nama_lengkap.trim() || !form.username.trim() || !form.nis.trim() || !form.kelas.trim()) {
       setFormError('Semua field wajib diisi')
       return
     }
-
     setIsSubmitting(true)
     try {
       let result
@@ -150,12 +199,7 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
           password: form.password || undefined,
         })
       }
-
-      if (!result.success) {
-        setFormError(result.error)
-        return
-      }
-
+      if (!result.success) { setFormError(result.error); return }
       setModalOpen(false)
       setSelectedSiswa(null)
       setForm(EMPTY_FORM)
@@ -165,20 +209,24 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
     }
   }
 
+  // Delete
+  const handleDeleteClick = (siswa: User) => {
+    setSiswaToDelete(siswa)
+    setConfirmOpen(true)
+  }
+
+  const handleConfirmClose = () => {
+    if (isDeleting) return
+    setConfirmOpen(false)
+    setSiswaToDelete(null)
+  }
+
   const handleDeleteConfirm = async () => {
     if (!siswaToDelete) return
     setIsDeleting(true)
     try {
       const result = await deleteSiswa(siswaToDelete.id)
-      if (!result.success) {
-        // Close confirm dialog and show error via alert (simple inline approach)
-        setConfirmOpen(false)
-        setSiswaToDelete(null)
-        // Re-open with error — use formError pattern via a separate state if needed
-        // For now, alert is acceptable for delete errors
-        alert(result.error)
-        return
-      }
+      if (!result.success) { alert(result.error); return }
       setConfirmOpen(false)
       setSiswaToDelete(null)
       router.refresh()
@@ -187,8 +235,7 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
     }
   }
 
-  const handleImportClick = () => fileInputRef.current?.click()
-
+  // Import
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -202,7 +249,6 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
       const ws = wb.Sheets[wb.SheetNames[0]]
       const rows: string[][] = utils.sheet_to_json(ws, { header: 1, defval: '' })
 
-      // Cari baris header (yang mengandung "NIS")
       const headerRowIndex = rows.findIndex((row) =>
         row.some((cell) => String(cell).trim().toUpperCase() === 'NIS')
       )
@@ -234,10 +280,8 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
       const BATCH_SIZE = 20
       const total = dataRows.length
       setImportProgress({ current: 0, total })
-      setIsImporting(true)
 
       const accumulated: ImportSiswaResult = { imported: 0, skipped: 0, errors: [] }
-
       for (let i = 0; i < total; i += BATCH_SIZE) {
         const batch = dataRows.slice(i, i + BATCH_SIZE)
         const result = await importSiswa(batch)
@@ -258,18 +302,49 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
     }
   }
 
+  const aktifCount = initialData.filter((s) => !s.is_archived).length
+  const arsipCount = initialData.filter((s) => s.is_archived).length
+
   return (
     <div className="space-y-4">
-      {/* Toolbar */}
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <input
-          type="text"
-          placeholder="Cari nama atau NIS..."
-          value={search}
-          onChange={(e) => handleSearchChange(e.target.value)}
-          className="w-full sm:w-72 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          aria-label="Cari siswa"
-        />
+      {/* Tabs */}
+      <div className="flex items-center justify-between">
+        <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+          <button
+            type="button"
+            onClick={() => handleTabChange('aktif')}
+            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+              tab === 'aktif'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Siswa Aktif
+            <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${
+              tab === 'aktif' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-500'
+            }`}>
+              {aktifCount}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleTabChange('arsip')}
+            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+              tab === 'arsip'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Arsip
+            <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${
+              tab === 'arsip' ? 'bg-orange-100 text-orange-700' : 'bg-gray-200 text-gray-500'
+            }`}>
+              {arsipCount}
+            </span>
+          </button>
+        </div>
+
+        {/* Toolbar kanan */}
         <div className="flex gap-2">
           <input
             ref={fileInputRef}
@@ -278,51 +353,93 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
             className="hidden"
             onChange={handleFileChange}
           />
-          <button
-            type="button"
-            onClick={() => setTemplateModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-green-700 bg-white border border-green-300 rounded-md hover:bg-green-50 transition-colors whitespace-nowrap"
-          >
-            Import Excel
-          </button>
-          <button
-            type="button"
-            onClick={handleAddSiswa}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors whitespace-nowrap"
-          >
-            <span aria-hidden="true">+</span>
-            Tambah Siswa
-          </button>
+          <input
+            type="text"
+            placeholder="Cari nama atau NIS..."
+            value={search}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            className="w-52 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          {tab === 'aktif' && (
+            <>
+              <button
+                type="button"
+                onClick={() => setTemplateModalOpen(true)}
+                className="px-4 py-2 text-sm font-medium text-green-700 bg-white border border-green-300 rounded-md hover:bg-green-50 transition-colors whitespace-nowrap"
+              >
+                Import Excel
+              </button>
+              <button
+                type="button"
+                onClick={handleAddSiswa}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors whitespace-nowrap"
+              >
+                <span aria-hidden="true">+</span>
+                Tambah Siswa
+              </button>
+            </>
+          )}
         </div>
       </div>
+
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-lg">
+          <span className="text-sm font-medium text-blue-800">
+            {selectedIds.size} siswa dipilih
+          </span>
+          <button
+            type="button"
+            onClick={handleBulkArchive}
+            disabled={isBulkActing}
+            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors disabled:opacity-50 ${
+              tab === 'aktif'
+                ? 'bg-orange-100 text-orange-700 border border-orange-200 hover:bg-orange-200'
+                : 'bg-green-100 text-green-700 border border-green-200 hover:bg-green-200'
+            }`}
+          >
+            {isBulkActing
+              ? 'Memproses...'
+              : tab === 'aktif'
+              ? 'Arsipkan'
+              : 'Pulihkan ke Aktif'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedIds(new Set())}
+            className="ml-auto text-xs text-gray-500 hover:text-gray-700"
+          >
+            Batalkan pilihan
+          </button>
+        </div>
+      )}
 
       {/* Table */}
       <div className="overflow-x-auto rounded-lg border border-gray-200">
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50">
             <tr>
-              <th
-                scope="col"
-                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-              >
+              <th className="w-12 px-4 py-3 cursor-pointer" onClick={handleSelectAll}>
+                <input
+                  type="checkbox"
+                  checked={isAllSelected}
+                  ref={(el) => { if (el) el.indeterminate = isIndeterminate }}
+                  onChange={handleSelectAll}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  aria-label="Pilih semua"
+                />
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Nama Lengkap
               </th>
-              <th
-                scope="col"
-                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-              >
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 NIS
               </th>
-              <th
-                scope="col"
-                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-              >
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Kelas
               </th>
-              <th
-                scope="col"
-                className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
-              >
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Aksi
               </th>
             </tr>
@@ -330,13 +447,32 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
           <tbody className="bg-white divide-y divide-gray-200">
             {paginated.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
-                  {search ? 'Tidak ada siswa yang cocok dengan pencarian.' : 'Belum ada data siswa.'}
+                <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                  {search
+                    ? 'Tidak ada siswa yang cocok dengan pencarian.'
+                    : tab === 'aktif'
+                    ? 'Belum ada data siswa aktif.'
+                    : 'Belum ada siswa yang diarsipkan.'}
                 </td>
               </tr>
             ) : (
               paginated.map((siswa) => (
-                <tr key={siswa.id} className="hover:bg-gray-50 transition-colors">
+                <tr
+                  key={siswa.id}
+                  className={`hover:bg-gray-50 transition-colors ${selectedIds.has(siswa.id) ? 'bg-blue-50' : ''}`}
+                >
+                  <td
+                    className="px-4 py-3 cursor-pointer"
+                    onClick={() => handleSelectOne(siswa.id)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(siswa.id)}
+                      onChange={() => handleSelectOne(siswa.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                  </td>
                   <td className="px-4 py-3 text-gray-900 font-medium">{siswa.nama_lengkap}</td>
                   <td className="px-4 py-3 text-gray-600">{siswa.nis ?? '-'}</td>
                   <td className="px-4 py-3 text-gray-600">{siswa.kelas ?? '-'}</td>
@@ -375,10 +511,9 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
           <div className="flex gap-1">
             <button
               type="button"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              onClick={() => { setPage((p) => Math.max(1, p - 1)); setSelectedIds(new Set()) }}
               disabled={page === 1}
               className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              aria-label="Halaman sebelumnya"
             >
               ‹
             </button>
@@ -386,24 +521,19 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
               <button
                 key={p}
                 type="button"
-                onClick={() => setPage(p)}
+                onClick={() => { setPage(p); setSelectedIds(new Set()) }}
                 className={`px-3 py-1 border rounded transition-colors ${
-                  p === page
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'border-gray-300 hover:bg-gray-50'
+                  p === page ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 hover:bg-gray-50'
                 }`}
-                aria-label={`Halaman ${p}`}
-                aria-current={p === page ? 'page' : undefined}
               >
                 {p}
               </button>
             ))}
             <button
               type="button"
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              onClick={() => { setPage((p) => Math.min(totalPages, p + 1)); setSelectedIds(new Set()) }}
               disabled={page === totalPages}
               className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              aria-label="Halaman berikutnya"
             >
               ›
             </button>
@@ -412,155 +542,74 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
       )}
 
       {/* Modal Form: Tambah / Edit Siswa */}
-      <Modal
-        isOpen={modalOpen}
-        onClose={handleModalClose}
-        title={selectedSiswa ? 'Edit Siswa' : 'Tambah Siswa'}
-      >
+      <Modal isOpen={modalOpen} onClose={handleModalClose} title={selectedSiswa ? 'Edit Siswa' : 'Tambah Siswa'}>
         <form onSubmit={handleFormSubmit} noValidate className="space-y-4">
           {formError && (
-            <div
-              role="alert"
-              className="px-3 py-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md"
-            >
+            <div role="alert" className="px-3 py-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md">
               {formError}
             </div>
           )}
-
           <div>
             <label htmlFor="siswa-nama" className="block text-sm font-medium text-gray-700 mb-1">
-              Nama Lengkap <span className="text-red-500" aria-hidden="true">*</span>
+              Nama Lengkap <span className="text-red-500">*</span>
             </label>
-            <input
-              id="siswa-nama"
-              type="text"
-              value={form.nama_lengkap}
+            <input id="siswa-nama" type="text" value={form.nama_lengkap}
               onChange={(e) => handleFormChange('nama_lengkap', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Masukkan nama lengkap"
-              disabled={isSubmitting}
-              required
-            />
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Masukkan nama lengkap" disabled={isSubmitting} required />
           </div>
-
           <div>
             <label htmlFor="siswa-username" className="block text-sm font-medium text-gray-700 mb-1">
-              Username <span className="text-red-500" aria-hidden="true">*</span>
+              Username <span className="text-red-500">*</span>
             </label>
-            <input
-              id="siswa-username"
-              type="text"
-              value={form.username}
+            <input id="siswa-username" type="text" value={form.username}
               onChange={(e) => handleFormChange('username', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Masukkan username"
-              disabled={isSubmitting}
-              required
-            />
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Masukkan username" disabled={isSubmitting} required />
           </div>
-
           <div>
             <label htmlFor="siswa-nis" className="block text-sm font-medium text-gray-700 mb-1">
-              NIS <span className="text-red-500" aria-hidden="true">*</span>
+              NIS <span className="text-red-500">*</span>
             </label>
-            <input
-              id="siswa-nis"
-              type="text"
-              value={form.nis}
+            <input id="siswa-nis" type="text" value={form.nis}
               onChange={(e) => handleFormChange('nis', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Masukkan NIS"
-              disabled={isSubmitting}
-              required
-            />
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Masukkan NIS" disabled={isSubmitting} required />
           </div>
-
           <div>
             <label htmlFor="siswa-kelas" className="block text-sm font-medium text-gray-700 mb-1">
-              Kelas <span className="text-red-500" aria-hidden="true">*</span>
+              Kelas <span className="text-red-500">*</span>
             </label>
-            <input
-              id="siswa-kelas"
-              type="text"
-              value={form.kelas}
+            <input id="siswa-kelas" type="text" value={form.kelas}
               onChange={(e) => handleFormChange('kelas', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Contoh: XII IPA 1"
-              disabled={isSubmitting}
-              required
-            />
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Contoh: XII IPA 1" disabled={isSubmitting} required />
           </div>
-
           <div>
             <label htmlFor="siswa-password" className="block text-sm font-medium text-gray-700 mb-1">
               Password
             </label>
-            <input
-              id="siswa-password"
-              type="password"
-              value={form.password}
+            <input id="siswa-password" type="password" value={form.password}
               onChange={(e) => handleFormChange('password', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder={selectedSiswa ? 'Kosongkan jika tidak ingin mengubah' : 'Kosongkan untuk pakai NIS sebagai password'}
-              disabled={isSubmitting}
-            />
+              disabled={isSubmitting} />
           </div>
-
           <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={handleModalClose}
-              disabled={isSubmitting}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
+            <button type="button" onClick={handleModalClose} disabled={isSubmitting}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50">
               Batal
             </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSubmitting ? (
-                <span className="flex items-center gap-2">
-                  <svg
-                    className="animate-spin h-4 w-4"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
-                  </svg>
-                  Menyimpan...
-                </span>
-              ) : selectedSiswa ? (
-                'Simpan Perubahan'
-              ) : (
-                'Tambah Siswa'
-              )}
+            <button type="submit" disabled={isSubmitting}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50">
+              {isSubmitting ? 'Menyimpan...' : selectedSiswa ? 'Simpan Perubahan' : 'Tambah Siswa'}
             </button>
           </div>
         </form>
       </Modal>
 
       {/* Modal Loading Progress Import */}
-      <Modal
-        isOpen={isImporting}
-        onClose={() => {}}
-        title="Mengimpor Data Siswa"
-      >
+      <Modal isOpen={isImporting} onClose={() => {}} title="Mengimpor Data Siswa">
         {(() => {
           const { current, total } = importProgress
           const pct = total > 0 ? Math.round((current / total) * 100) : 0
@@ -571,10 +620,7 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
                 <span className="font-semibold">{pct}%</span>
               </div>
               <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
-                <div
-                  className="h-3 rounded-full bg-green-500 transition-all duration-300"
-                  style={{ width: `${pct}%` }}
-                />
+                <div className="h-3 rounded-full bg-green-500 transition-all duration-300" style={{ width: `${pct}%` }} />
               </div>
               <p className="text-xs text-gray-400 text-center">Mohon tunggu, jangan tutup halaman ini...</p>
             </div>
@@ -583,16 +629,10 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
       </Modal>
 
       {/* Modal Import Excel */}
-      <Modal
-        isOpen={templateModalOpen}
-        onClose={() => setTemplateModalOpen(false)}
-        title="Import Data Siswa"
-      >
+      <Modal isOpen={templateModalOpen} onClose={() => setTemplateModalOpen(false)} title="Import Data Siswa">
         <div className="space-y-4 text-sm">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              File Excel (.xlsx)
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">File Excel (.xlsx)</label>
             <input
               type="file"
               accept=".xlsx"
@@ -604,22 +644,14 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
               className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
             />
           </div>
-          <a
-            href="/template-import-siswa.xlsx"
-            download
-            className="inline-block text-sm text-blue-600 hover:underline"
-          >
+          <a href="/template-import-siswa.xlsx" download className="inline-block text-sm text-blue-600 hover:underline">
             Unduh file template
           </a>
         </div>
       </Modal>
 
       {/* Modal Hasil Import */}
-      <Modal
-        isOpen={importResultOpen}
-        onClose={() => setImportResultOpen(false)}
-        title="Hasil Import Excel"
-      >
+      <Modal isOpen={importResultOpen} onClose={() => setImportResultOpen(false)} title="Hasil Import Excel">
         {importResult && (
           <div className="space-y-4 text-sm">
             <div className="flex gap-4">
@@ -630,7 +662,7 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
               {importResult.skipped > 0 && (
                 <div className="flex-1 rounded-lg bg-yellow-50 border border-yellow-200 p-3 text-center">
                   <p className="text-2xl font-bold text-yellow-700">{importResult.skipped}</p>
-                  <p className="text-yellow-600">Dilewati (data kosong)</p>
+                  <p className="text-yellow-600">Dilewati</p>
                 </div>
               )}
               {importResult.errors.length > 0 && (
@@ -640,30 +672,19 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
                 </div>
               )}
             </div>
-
             {importResult.errors.length > 0 && (
-              <div>
-                <p className="font-medium text-gray-700 mb-2">Data yang gagal diimpor:</p>
-                <ul className="space-y-1 max-h-40 overflow-y-auto">
-                  {importResult.errors.map((err) => (
-                    <li key={err.nis} className="text-red-600 bg-red-50 px-3 py-1.5 rounded">
-                      NIS {err.nis} — {err.message}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              <ul className="space-y-1 max-h-40 overflow-y-auto">
+                {importResult.errors.map((err) => (
+                  <li key={err.nis} className="text-red-600 bg-red-50 px-3 py-1.5 rounded text-xs">
+                    NIS {err.nis} — {err.message}
+                  </li>
+                ))}
+              </ul>
             )}
-
-            <p className="text-xs text-gray-500">
-              Password default setiap siswa = NIS masing-masing. Username = NIS.
-            </p>
-
+            <p className="text-xs text-gray-500">Username dan password default = NIS masing-masing.</p>
             <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => setImportResultOpen(false)}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
-              >
+              <button type="button" onClick={() => setImportResultOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors">
                 Tutup
               </button>
             </div>

@@ -6,6 +6,7 @@ export interface User {
   kelas: string | null
   role: 'siswa' | 'admin'
   auth_user_id: string | null
+  is_archived: boolean
   created_at: string
   updated_at: string
 }
