@@ -88,6 +88,59 @@ export async function updateSiswa(id: string, data: UpdateSiswaInput): Promise<A
   return { success: true, data: updated }
 }
 
+export interface ImportSiswaRow {
+  nama_lengkap: string
+  nis: string
+  kelas: string
+}
+
+export interface ImportSiswaResult {
+  imported: number
+  skipped: number
+  errors: { nis: string; message: string }[]
+}
+
+export async function importSiswa(rows: ImportSiswaRow[]): Promise<ImportSiswaResult> {
+  const supabase = createAdminClient()
+  let imported = 0
+  let skipped = 0
+  const errors: { nis: string; message: string }[] = []
+
+  for (const row of rows) {
+    if (!row.nama_lengkap || !row.nis || !row.kelas) {
+      skipped++
+      continue
+    }
+
+    const username = row.nis
+    const password_hash = await bcrypt.hash(row.nis, 10)
+
+    const { error } = await supabase
+      .from('users')
+      .insert({
+        nama_lengkap: row.nama_lengkap.trim(),
+        username,
+        nis: row.nis.trim(),
+        kelas: row.kelas.trim(),
+        role: 'siswa',
+        password_hash,
+      })
+
+    if (error) {
+      if (error.code === '23505') {
+        errors.push({ nis: row.nis, message: 'NIS atau username sudah terdaftar' })
+      } else {
+        errors.push({ nis: row.nis, message: 'Gagal menyimpan data' })
+      }
+    } else {
+      imported++
+    }
+  }
+
+  if (imported > 0) revalidatePath('/admin')
+  return { imported, skipped, errors }
+}
+
 export async function deleteSiswa(id: string): Promise<ActionResult> {
   const supabase = createAdminClient()
 

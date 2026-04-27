@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import type { User } from '@/types/database'
 import Modal from '@/components/ui/Modal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
-import { createSiswa, updateSiswa, deleteSiswa } from '@/actions/siswa'
+import { createSiswa, updateSiswa, deleteSiswa, importSiswa } from '@/actions/siswa'
+import type { ImportSiswaRow, ImportSiswaResult } from '@/actions/siswa'
 
 interface SiswaTableProps {
   initialData: User[]
@@ -41,6 +42,13 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
   const [formError, setFormError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  // Import state
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isImporting, setIsImporting] = useState(false)
+  const [importResult, setImportResult] = useState<ImportSiswaResult | null>(null)
+  const [importResultOpen, setImportResultOpen] = useState(false)
+  const [templateModalOpen, setTemplateModalOpen] = useState(false)
 
   // Client-side filtering (case-insensitive, by nama_lengkap or nis)
   const filtered = useMemo(() => {
@@ -174,6 +182,60 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
     }
   }
 
+  const handleImportClick = () => fileInputRef.current?.click()
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+
+    setIsImporting(true)
+    try {
+      const { read, utils } = await import('xlsx')
+      const buffer = await file.arrayBuffer()
+      const wb = read(buffer, { type: 'array' })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows: string[][] = utils.sheet_to_json(ws, { header: 1, defval: '' })
+
+      // Cari baris header (yang mengandung "NIS")
+      const headerRowIndex = rows.findIndex((row) =>
+        row.some((cell) => String(cell).trim().toUpperCase() === 'NIS')
+      )
+      if (headerRowIndex === -1) {
+        alert('Format file tidak sesuai. Pastikan ada kolom NIS.')
+        return
+      }
+
+      const header = rows[headerRowIndex].map((h) => String(h).trim().toUpperCase())
+      const colNama = header.findIndex((h) => h === 'NAMA')
+      const colNIS = header.findIndex((h) => h === 'NIS')
+      const colKelas = header.findIndex((h) => h === 'KELAS')
+
+      const dataRows: ImportSiswaRow[] = []
+      for (let i = headerRowIndex + 1; i < rows.length; i++) {
+        const row = rows[i]
+        const nama = String(row[colNama] ?? '').trim()
+        const nis = String(row[colNIS] ?? '').trim()
+        const kelas = String(row[colKelas] ?? '').trim()
+        if (!nama || !nis || !kelas) continue
+        dataRows.push({ nama_lengkap: nama, nis, kelas })
+      }
+
+      if (dataRows.length === 0) {
+        alert('Tidak ada data siswa yang valid ditemukan di file.')
+        return
+      }
+
+      const result = await importSiswa(dataRows)
+      setImportResult(result)
+      setImportResultOpen(true)
+    } catch {
+      alert('Gagal membaca file. Pastikan file berformat .xlsx yang valid.')
+    } finally {
+      setIsImporting(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* Toolbar */}
@@ -186,14 +248,30 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
           className="w-full sm:w-72 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           aria-label="Cari siswa"
         />
-        <button
-          type="button"
-          onClick={handleAddSiswa}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors whitespace-nowrap"
-        >
-          <span aria-hidden="true">+</span>
-          Tambah Siswa
-        </button>
+        <div className="flex gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+          <button
+            type="button"
+            onClick={() => setTemplateModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-green-700 bg-white border border-green-300 rounded-md hover:bg-green-50 transition-colors whitespace-nowrap"
+          >
+            Import Excel
+          </button>
+          <button
+            type="button"
+            onClick={handleAddSiswa}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors whitespace-nowrap"
+          >
+            <span aria-hidden="true">+</span>
+            Tambah Siswa
+          </button>
+        </div>
       </div>
 
       {/* Table */}
@@ -453,6 +531,95 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Modal Import Excel */}
+      <Modal
+        isOpen={templateModalOpen}
+        onClose={() => setTemplateModalOpen(false)}
+        title="Import Data Siswa"
+      >
+        <div className="space-y-4 text-sm">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              File Excel (.xlsx)
+            </label>
+            <input
+              type="file"
+              accept=".xlsx"
+              disabled={isImporting}
+              onChange={async (e) => {
+                setTemplateModalOpen(false)
+                await handleFileChange(e)
+              }}
+              className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
+            />
+          </div>
+          <a
+            href="/template-import-siswa.xlsx"
+            download
+            className="inline-block text-sm text-blue-600 hover:underline"
+          >
+            Unduh file template
+          </a>
+        </div>
+      </Modal>
+
+      {/* Modal Hasil Import */}
+      <Modal
+        isOpen={importResultOpen}
+        onClose={() => setImportResultOpen(false)}
+        title="Hasil Import Excel"
+      >
+        {importResult && (
+          <div className="space-y-4 text-sm">
+            <div className="flex gap-4">
+              <div className="flex-1 rounded-lg bg-green-50 border border-green-200 p-3 text-center">
+                <p className="text-2xl font-bold text-green-700">{importResult.imported}</p>
+                <p className="text-green-600">Berhasil diimpor</p>
+              </div>
+              {importResult.skipped > 0 && (
+                <div className="flex-1 rounded-lg bg-yellow-50 border border-yellow-200 p-3 text-center">
+                  <p className="text-2xl font-bold text-yellow-700">{importResult.skipped}</p>
+                  <p className="text-yellow-600">Dilewati (data kosong)</p>
+                </div>
+              )}
+              {importResult.errors.length > 0 && (
+                <div className="flex-1 rounded-lg bg-red-50 border border-red-200 p-3 text-center">
+                  <p className="text-2xl font-bold text-red-700">{importResult.errors.length}</p>
+                  <p className="text-red-600">Gagal</p>
+                </div>
+              )}
+            </div>
+
+            {importResult.errors.length > 0 && (
+              <div>
+                <p className="font-medium text-gray-700 mb-2">Data yang gagal diimpor:</p>
+                <ul className="space-y-1 max-h-40 overflow-y-auto">
+                  {importResult.errors.map((err) => (
+                    <li key={err.nis} className="text-red-600 bg-red-50 px-3 py-1.5 rounded">
+                      NIS {err.nis} — {err.message}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <p className="text-xs text-gray-500">
+              Password default setiap siswa = NIS masing-masing. Username = NIS.
+            </p>
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setImportResultOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* Confirm Dialog: Hapus Siswa */}
