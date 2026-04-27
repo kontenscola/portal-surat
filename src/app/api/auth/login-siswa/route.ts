@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import bcrypt from 'bcryptjs'
 import { loginSiswaSchema } from '@/lib/validations/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { signSiswaSession, SESSION_COOKIE_NAME } from '@/lib/auth/session'
@@ -7,7 +8,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
 
-    // Validasi input
     const parsed = loginSiswaSchema.safeParse(body)
     if (!parsed.success) {
       return NextResponse.json(
@@ -16,26 +16,31 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { username, nis } = parsed.data
+    const { nis, password } = parsed.data
 
-    // Query users dengan Supabase admin client
     const supabase = createAdminClient()
     const { data: user, error } = await supabase
       .from('users')
       .select('*')
-      .eq('username', username)
       .eq('nis', nis)
       .eq('role', 'siswa')
       .single()
 
-    if (error || !user) {
+    if (error || !user || !user.password_hash) {
       return NextResponse.json(
-        { error: 'Username atau NIS salah' },
+        { error: 'NIS atau password salah' },
         { status: 401 }
       )
     }
 
-    // Buat JWT custom
+    const passwordMatch = await bcrypt.compare(password, user.password_hash)
+    if (!passwordMatch) {
+      return NextResponse.json(
+        { error: 'NIS atau password salah' },
+        { status: 401 }
+      )
+    }
+
     const token = await signSiswaSession({
       user_id: user.id,
       username: user.username,
@@ -45,7 +50,6 @@ export async function POST(request: NextRequest) {
       role: 'siswa',
     })
 
-    // Set cookie dan return JSON sukses (client yang handle navigate)
     const response = NextResponse.json({ success: true }, { status: 200 })
     response.cookies.set(SESSION_COOKIE_NAME, token, {
       httpOnly: true,

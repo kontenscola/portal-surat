@@ -11,7 +11,7 @@ export default function LoginForm() {
 
   // Siswa form state
   const [nis, setNis] = useState('')
-  const [namaLengkap, setNamaLengkap] = useState('')
+  const [password, setPassword] = useState('')
 
   // Admin form state
   const [adminUsername, setAdminUsername] = useState('')
@@ -21,8 +21,8 @@ export default function LoginForm() {
     e.preventDefault()
     setError(null)
 
-    if (!nis.trim() || !namaLengkap.trim()) {
-      setError('NIS dan Nama Lengkap wajib diisi')
+    if (!nis.trim() || !password) {
+      setError('NIS dan Password wajib diisi')
       return
     }
 
@@ -31,13 +31,13 @@ export default function LoginForm() {
       const res = await fetch('/api/auth/login-siswa', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: namaLengkap.trim(), nis: nis.trim() }),
+        body: JSON.stringify({ nis: nis.trim(), password }),
       })
 
       const data = await res.json()
 
       if (!res.ok) {
-        setError(data.error ?? 'NIS atau Nama Lengkap tidak sesuai.')
+        setError(data.error ?? 'NIS atau password tidak sesuai.')
         return
       }
 
@@ -133,15 +133,15 @@ export default function LoginForm() {
               </div>
 
               <div>
-                <label htmlFor="nama-lengkap" className="block text-sm font-medium text-gray-700 mb-1">
-                  Nama Lengkap <span className="text-red-500">*</span>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+                  Password <span className="text-red-500">*</span>
                 </label>
                 <input
-                  id="nama-lengkap"
-                  type="text"
-                  value={namaLengkap}
-                  onChange={(e) => setNamaLengkap(e.target.value)}
-                  placeholder="Sesuai data sekolah"
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Masukkan password kamu"
                   disabled={isLoading}
                   className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm placeholder-gray-400 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-100 disabled:bg-gray-50"
                 />

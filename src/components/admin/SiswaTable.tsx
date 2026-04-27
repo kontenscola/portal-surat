@@ -16,6 +16,7 @@ interface FormState {
   username: string
   nis: string
   kelas: string
+  password: string
 }
 
 const EMPTY_FORM: FormState = {
@@ -23,6 +24,7 @@ const EMPTY_FORM: FormState = {
   username: '',
   nis: '',
   kelas: '',
+  password: '',
 }
 
 const PAGE_SIZE = 20
@@ -77,6 +79,7 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
       username: siswa.username,
       nis: siswa.nis ?? '',
       kelas: siswa.kelas ?? '',
+      password: '',
     })
     setFormError(null)
     setModalOpen(true)
@@ -125,6 +128,7 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
           username: form.username.trim(),
           nis: form.nis.trim(),
           kelas: form.kelas.trim(),
+          password: form.password || undefined,
         })
       } else {
         result = await createSiswa({
@@ -132,6 +136,7 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
           username: form.username.trim(),
           nis: form.nis.trim(),
           kelas: form.kelas.trim(),
+          password: form.password || undefined,
         })
       }
 
@@ -383,6 +388,21 @@ export default function SiswaTable({ initialData }: SiswaTableProps) {
               placeholder="Contoh: XII IPA 1"
               disabled={isSubmitting}
               required
+            />
+          </div>
+
+          <div>
+            <label htmlFor="siswa-password" className="block text-sm font-medium text-gray-700 mb-1">
+              Password
+            </label>
+            <input
+              id="siswa-password"
+              type="password"
+              value={form.password}
+              onChange={(e) => handleFormChange('password', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder={selectedSiswa ? 'Kosongkan jika tidak ingin mengubah' : 'Kosongkan untuk pakai NIS sebagai password'}
+              disabled={isSubmitting}
             />
           </div>
 

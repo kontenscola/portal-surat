@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import bcrypt from 'bcryptjs'
 // Menggunakan service role client karena ini adalah Server Action admin.
 // Service role melewati RLS sehingga admin dapat membaca dan memodifikasi
 // data semua siswa. Persyaratan 7.6 — admin memiliki akses penuh ke tabel
@@ -18,12 +19,14 @@ export async function createSiswa(data: CreateSiswaInput): Promise<ActionResult>
     return { success: false, error: firstError }
   }
 
-  const { nama_lengkap, username, nis, kelas } = parsed.data
+  const { nama_lengkap, username, nis, kelas, password } = parsed.data
   const supabase = createAdminClient()
+
+  const password_hash = await bcrypt.hash(password?.trim() || nis, 10)
 
   const { data: inserted, error } = await supabase
     .from('users')
-    .insert({ nama_lengkap, username, nis, kelas, role: 'siswa' })
+    .insert({ nama_lengkap, username, nis, kelas, role: 'siswa', password_hash })
     .select()
     .single()
 
@@ -52,12 +55,17 @@ export async function updateSiswa(id: string, data: UpdateSiswaInput): Promise<A
     return { success: false, error: firstError }
   }
 
-  const { nama_lengkap, username, nis, kelas } = parsed.data
+  const { nama_lengkap, username, nis, kelas, password } = parsed.data
   const supabase = createAdminClient()
+
+  const updatePayload: Record<string, unknown> = { nama_lengkap, username, nis, kelas }
+  if (password?.trim()) {
+    updatePayload.password_hash = await bcrypt.hash(password.trim(), 10)
+  }
 
   const { data: updated, error } = await supabase
     .from('users')
-    .update({ nama_lengkap, username, nis, kelas })
+    .update(updatePayload)
     .eq('id', id)
     .select()
     .single()
