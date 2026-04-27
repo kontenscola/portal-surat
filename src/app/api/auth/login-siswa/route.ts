@@ -33,6 +33,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (user.is_archived) {
+      return NextResponse.json(
+        { error: 'Akun ini telah dinonaktifkan. Hubungi pihak sekolah untuk informasi lebih lanjut.' },
+        { status: 403 }
+      )
+    }
+
     const passwordMatch = await bcrypt.compare(password, user.password_hash)
     if (!passwordMatch) {
       return NextResponse.json(
