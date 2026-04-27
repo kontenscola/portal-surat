@@ -11,32 +11,32 @@ interface Slide {
 
 const SLIDES: Slide[] = [
   {
-    image: '/gedung-sekolah.jpg',
-    badge: 'KAMPUS',
-    title: 'Lingkungan Sekolah',
-    subtitle: 'Suasana nyaman untuk tumbuh dan belajar bersama',
+    image: '/LINGKUNGAN-SEKOLAH-1.png',
+    badge: 'LINGKUNGAN',
+    title: 'Lingkungan Sekolah yang Asri',
+    subtitle: 'SMA Antartika Sidoarjo — tempat terbaik untuk bertumbuh dan berkembang',
   },
   {
-    image: '/gedung-sekolah-2.jpg',
+    image: '/FASILITAS-SEKOLAH.png',
     badge: 'FASILITAS',
-    title: 'Fasilitas Lengkap',
-    subtitle: 'Mendukung proses belajar mengajar yang optimal',
+    title: 'Fasilitas Lengkap & Modern',
+    subtitle: 'Ruang belajar, perpustakaan, dan laboratorium yang mendukung proses pendidikan',
   },
   {
-    image: '/gedung-sekolah-3.jpg',
+    image: '/PRESTASI-1.png',
     badge: 'PRESTASI',
-    title: 'Raih Prestasi Terbaik',
-    subtitle: 'Bersama SMA Antartika Sidoarjo menuju masa depan',
+    title: 'Berprestasi di Bidang Olahraga',
+    subtitle: 'Futsal, karate, dan berbagai kompetisi olahraga tingkat Jawa Timur & Nasional',
+  },
+  {
+    image: '/PRESTASI-2.png',
+    badge: 'PRESTASI',
+    title: 'Unggul dalam Akademik & Seni',
+    subtitle: 'Paskibraka, lomba seni, olahraga dayung, hingga Duta Pariwisata Jawa Timur',
   },
 ]
 
-// Filter hanya slide yang fotonya tersedia
-// Untuk sementara pakai foto pertama untuk semua slide jika foto lain belum ada
-const ACTIVE_SLIDES = SLIDES.map((slide, i) => ({
-  ...slide,
-  // Fallback ke foto pertama jika foto ke-2 dan ke-3 belum ada
-  image: i === 0 ? slide.image : slide.image,
-}))
+const ACTIVE_SLIDES = SLIDES
 
 export default function BannerSlider() {
   const [current, setCurrent] = useState(0)
@@ -77,13 +77,6 @@ export default function BannerSlider() {
         className={`h-full w-full object-cover transition-opacity duration-300 ${
           isTransitioning ? 'opacity-0' : 'opacity-100'
         }`}
-        onError={(e) => {
-          // Fallback ke foto pertama jika foto tidak ditemukan
-          const target = e.target as HTMLImageElement
-          if (target.src !== window.location.origin + '/gedung-sekolah.jpg') {
-            target.src = '/gedung-sekolah.jpg'
-          }
-        }}
       />
 
       {/* Overlay gradient */}

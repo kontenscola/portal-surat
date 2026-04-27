@@ -233,7 +233,7 @@ export default function LoginForm() {
 
       {/* Footer */}
       <div className="mt-6 text-center">
-        <p className="text-xs text-gray-400">SMA Antartika Sidoharjo · Portal Surat &amp; Dokumen</p>
+        <p className="text-xs text-gray-400">SMA Antartika Sidoarjo · Portal Surat &amp; Dokumen</p>
         <p className="text-xs text-gray-400">© 2025 · All rights reserved</p>
       </div>
     </div>
