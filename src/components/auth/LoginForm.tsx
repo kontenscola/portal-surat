@@ -10,7 +10,7 @@ export default function LoginForm() {
   const [error, setError] = useState<string | null>(null)
 
   // Siswa form state
-  const [nis, setNis] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
 
   // Admin form state
@@ -21,8 +21,8 @@ export default function LoginForm() {
     e.preventDefault()
     setError(null)
 
-    if (!nis.trim() || !password) {
-      setError('NIS dan Password wajib diisi')
+    if (!username.trim() || !password) {
+      setError('Username dan Password wajib diisi')
       return
     }
 
@@ -31,13 +31,13 @@ export default function LoginForm() {
       const res = await fetch('/api/auth/login-siswa', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nis: nis.trim(), password }),
+        body: JSON.stringify({ username: username.trim(), password }),
       })
 
       const data = await res.json()
 
       if (!res.ok) {
-        setError(data.error ?? 'NIS atau password tidak sesuai.')
+        setError(data.error ?? 'Username atau password tidak sesuai.')
         return
       }
 
@@ -118,15 +118,15 @@ export default function LoginForm() {
 
             <form onSubmit={handleSiswaSubmit} noValidate className="space-y-4">
               <div>
-                <label htmlFor="nis" className="block text-sm font-medium text-gray-700 mb-1">
-                  NIS (Nomor Induk Siswa) <span className="text-red-500">*</span>
+                <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
+                  Username <span className="text-red-500">*</span>
                 </label>
                 <input
-                  id="nis"
+                  id="username"
                   type="text"
-                  value={nis}
-                  onChange={(e) => setNis(e.target.value)}
-                  placeholder="Masukkan NIS kamu"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Masukkan username kamu"
                   disabled={isLoading}
                   className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm placeholder-gray-400 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-100 disabled:bg-gray-50"
                 />

@@ -16,19 +16,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { nis, password } = parsed.data
+    const { username, password } = parsed.data
 
     const supabase = createAdminClient()
     const { data: user, error } = await supabase
       .from('users')
       .select('*')
-      .eq('nis', nis)
+      .eq('username', username)
       .eq('role', 'siswa')
       .single()
 
     if (error || !user || !user.password_hash) {
       return NextResponse.json(
-        { error: 'NIS atau password salah' },
+        { error: 'Username atau password salah' },
         { status: 401 }
       )
     }
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     const passwordMatch = await bcrypt.compare(password, user.password_hash)
     if (!passwordMatch) {
       return NextResponse.json(
-        { error: 'NIS atau password salah' },
+        { error: 'Username atau password salah' },
         { status: 401 }
       )
     }
