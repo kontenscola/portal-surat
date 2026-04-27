@@ -26,7 +26,7 @@ const SLIDES: Slide[] = [
     image: '/gedung-sekolah-3.jpg',
     badge: 'PRESTASI',
     title: 'Raih Prestasi Terbaik',
-    subtitle: 'Bersama SMA Antartika Sidoharjo menuju masa depan',
+    subtitle: 'Bersama SMA Antartika Sidoarjo menuju masa depan',
   },
 ]
 
