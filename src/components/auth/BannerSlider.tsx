@@ -59,9 +59,9 @@ export default function BannerSlider() {
     goTo((current - 1 + ACTIVE_SLIDES.length) % ACTIVE_SLIDES.length)
   }, [current, goTo])
 
-  // Auto-play setiap 5 detik
+  // Auto-play setiap 10 detik
   useEffect(() => {
-    const timer = setInterval(goNext, 5000)
+    const timer = setInterval(goNext, 10000)
     return () => clearInterval(timer)
   }, [goNext])
 
