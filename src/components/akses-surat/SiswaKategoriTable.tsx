@@ -60,7 +60,7 @@ export default function SiswaKategoriTable({
     setNewUploads((prev) => {
       let changed = false
       const next = new Map(prev)
-      for (const siswaId of prev.keys()) {
+      for (const siswaId of Array.from(prev.keys())) {
         if (serverSiswaIds.has(siswaId)) {
           next.delete(siswaId)
           changed = true
