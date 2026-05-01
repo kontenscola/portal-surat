@@ -1,5 +1,7 @@
 import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase/admin'
+
+export const dynamic = 'force-dynamic'
 import KategoriGrid from '@/components/akses-surat/KategoriGrid'
 import type { SuratKategori } from '@/types/akses-surat'
 

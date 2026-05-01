@@ -94,7 +94,7 @@ export async function uploadFileSurat(
     return { success: false, error: `Gagal menyimpan data: ${dbError.message}` }
   }
 
-  revalidatePath('/admin/akses-surat')
+  revalidatePath(`/admin/akses-surat/${kategoriId}`)
   return { success: true, data: record }
 }
 
@@ -163,7 +163,7 @@ export async function gantiFileSurat(
     }
   }
 
-  revalidatePath('/admin/akses-surat')
+  revalidatePath(`/admin/akses-surat/${existing.kategori_id}`)
   return { success: true, data: updated }
 }
 
@@ -187,7 +187,7 @@ export async function toggleAksesDownload(suratSiswaId: string): Promise<ActionR
 
   const { data: current, error: fetchError } = await supabase
     .from('surat_siswa')
-    .select('akses_download')
+    .select('akses_download, kategori_id')
     .eq('id', suratSiswaId)
     .single()
 
@@ -207,7 +207,7 @@ export async function toggleAksesDownload(suratSiswaId: string): Promise<ActionR
     return { success: false, error: 'Gagal memperbarui status akses download' }
   }
 
-  revalidatePath('/admin/akses-surat')
+  revalidatePath(`/admin/akses-surat/${current.kategori_id}`)
   return { success: true, data: updated }
 }
 
@@ -216,7 +216,7 @@ export async function hapusSuratSiswa(suratSiswaId: string): Promise<ActionResul
 
   const { data: record, error: fetchError } = await supabase
     .from('surat_siswa')
-    .select('file_path')
+    .select('file_path, kategori_id')
     .eq('id', suratSiswaId)
     .single()
 
@@ -243,6 +243,6 @@ export async function hapusSuratSiswa(suratSiswaId: string): Promise<ActionResul
     }
   }
 
-  revalidatePath('/admin/akses-surat')
+  revalidatePath(`/admin/akses-surat/${record.kategori_id}`)
   return { success: true }
 }

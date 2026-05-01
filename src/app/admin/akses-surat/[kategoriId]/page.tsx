@@ -1,6 +1,8 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase/admin'
+
+export const dynamic = 'force-dynamic'
 import SiswaKategoriTable from '@/components/akses-surat/SiswaKategoriTable'
 import type { User } from '@/types/database'
 import type { SuratSiswaRow } from '@/types/akses-surat'

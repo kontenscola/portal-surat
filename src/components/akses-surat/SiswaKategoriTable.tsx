@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import type { User } from '@/types/database'
 import type { SuratSiswa, SuratSiswaRow } from '@/types/akses-surat'
 import Badge from '@/components/ui/Badge'
@@ -53,6 +53,22 @@ export default function SiswaKategoriTable({
   const [newUploads, setNewUploads] = useState<Map<string, SuratSiswaRow>>(new Map())
   // Siswa yang dihapus secara optimistic
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set())
+
+  // Hapus newUploads yang sudah masuk ke suratSiswaList dari server (setelah revalidate)
+  useEffect(() => {
+    const serverSiswaIds = new Set(suratSiswaList.map((s) => s.siswa_id))
+    setNewUploads((prev) => {
+      let changed = false
+      const next = new Map(prev)
+      for (const siswaId of prev.keys()) {
+        if (serverSiswaIds.has(siswaId)) {
+          next.delete(siswaId)
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [suratSiswaList])
 
   // Build map dari suratSiswaList (dari server) + newUploads, dikurangi deletedIds
   const suratSiswaMap = useMemo(() => {
@@ -136,7 +152,7 @@ export default function SiswaKategoriTable({
   const handleUploadSuccess = (updated: SuratSiswa) => {
     if (!selectedSiswa) return
     // Cek apakah sudah ada di suratSiswaList dari server
-    const existsInServer = suratSiswaList.some((s) => s.siswa_id === selectedSiswa.id)
+    const existsInServer = suratSiswaList.some((s) => s.siswa_id === selectedSiswa.id && !deletedIds.has(s.id))
     if (existsInServer) {
       // Update via optimistic override
       setOptimisticOverrides((prev) => ({
