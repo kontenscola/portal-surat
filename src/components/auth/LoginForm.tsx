@@ -92,7 +92,8 @@ export default function LoginForm() {
           <img
             src="/logo-sekolah.png"
             alt="Logo SMA Antartika"
-            className="relative z-10 w-16 h-16 object-contain"
+            className="relative z-10 object-contain"
+            style={{ width: '8rem', height: '8rem' }}
           />
         </div>
         <span className="inline-flex items-center gap-1.5 rounded-full border border-purple-300 bg-purple-50 px-3 py-1 text-xs font-medium text-purple-700 mb-4">
